@@ -56,7 +56,7 @@ func crawl(url string, ch chan string) {
 	}
 
 	b := resp.Body
-	defer b.Close() // close Body when the function completes
+	defer b.Close()
 
 	z := html.NewTokenizer(b)
 
@@ -121,42 +121,33 @@ func (e episode) String() string {
 }
 
 func main() {
-	seedUrls := []string{"https://www.channel4.com/programmes/location-location-location/episode-guide/"}
+	url := "https://www.channel4.com/programmes/location-location-location/episode-guide/"
 
 	// Channels
 	chEpisodeValues := make(chan string)
 
 	// Kick off the crawl process (concurrently)
-	for _, url := range seedUrls {
-		go crawl(url, chEpisodeValues)
-	}
+	go crawl(url, chEpisodeValues)
 
 	// Subscribe to both channels
 	var episodes []episode
 	var title, summary, link string
-	for c := 0; c < len(seedUrls); {
-		select {
-		case v, ok := <-chEpisodeValues:
-			if !ok {
-				c++
-				break
+	for v := range chEpisodeValues {
+		if strings.Contains(v, "Title:") {
+			if title != "" {
+				episodes = append(episodes, newEpisode(title, summary, link))
 			}
-			if strings.Contains(v, "Title:") {
-				if title != "" {
-					episodes = append(episodes, newEpisode(title, summary, link))
-				}
-				title = strings.Replace(v, "Title:   ", "", 1)
-			} else if strings.Contains(v, "Summary:") {
-				if summary != "" {
-					episodes = append(episodes, newEpisode(title, summary, link))
-				}
-				summary = strings.Replace(v, "Summary: ", "", 1)
-			} else if strings.Contains(v, "Link:") {
-				if link != "" {
-					episodes = append(episodes, newEpisode(title, summary, link))
-				}
-				link = strings.Replace(v, "Link:    ", "", 1)
+			title = strings.Replace(v, "Title:   ", "", 1)
+		} else if strings.Contains(v, "Summary:") {
+			if summary != "" {
+				episodes = append(episodes, newEpisode(title, summary, link))
 			}
+			summary = strings.Replace(v, "Summary: ", "", 1)
+		} else if strings.Contains(v, "Link:") {
+			if link != "" {
+				episodes = append(episodes, newEpisode(title, summary, link))
+			}
+			link = strings.Replace(v, "Link:    ", "", 1)
 		}
 	}
 
