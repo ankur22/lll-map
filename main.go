@@ -46,14 +46,10 @@ func getHref(t html.Token) (ok bool, href string) {
 	return
 }
 
-func crawl(url string, ch chan string, chFinished chan bool) {
+func crawl(url string, ch chan string) {
+	defer close(ch)
+
 	resp, err := http.Get(url)
-
-	defer func() {
-		// Notify that we're done after this function
-		chFinished <- true
-	}()
-
 	if err != nil {
 		fmt.Println("ERROR: Failed to crawl:", url)
 		return
@@ -128,12 +124,11 @@ func main() {
 	seedUrls := []string{"https://www.channel4.com/programmes/location-location-location/episode-guide/"}
 
 	// Channels
-	chUrls := make(chan string)
-	chFinished := make(chan bool)
+	chEpisodeValues := make(chan string)
 
 	// Kick off the crawl process (concurrently)
 	for _, url := range seedUrls {
-		go crawl(url, chUrls, chFinished)
+		go crawl(url, chEpisodeValues)
 	}
 
 	// Subscribe to both channels
@@ -141,7 +136,11 @@ func main() {
 	var title, summary, link string
 	for c := 0; c < len(seedUrls); {
 		select {
-		case v := <-chUrls:
+		case v, ok := <-chEpisodeValues:
+			if !ok {
+				c++
+				break
+			}
 			if strings.Contains(v, "Title:") {
 				if title != "" {
 					episodes = append(episodes, newEpisode(title, summary, link))
@@ -158,8 +157,6 @@ func main() {
 				}
 				link = strings.Replace(v, "Link:    ", "", 1)
 			}
-		case <-chFinished:
-			c++
 		}
 	}
 
@@ -168,6 +165,4 @@ func main() {
 	for _, e := range episodes {
 		fmt.Println(e)
 	}
-
-	close(chUrls)
 }
