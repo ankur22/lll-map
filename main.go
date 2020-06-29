@@ -27,7 +27,6 @@ func isSummary(t html.Token) (ok bool) {
 }
 
 func getHref(t html.Token) (ok bool, href string) {
-	// Iterate over token attributes until we find an "href"
 	found := false
 	for _, a := range t.Attr {
 		if strings.Contains(a.Val, "episodeGuide-episodeLink") {
@@ -44,8 +43,6 @@ func getHref(t html.Token) (ok bool, href string) {
 		ok = false
 	}
 
-	// "bare" return will return the variables (ok, href) as
-	// defined in the function definition
 	return
 }
 
@@ -74,7 +71,7 @@ func crawl(url string, ch chan string, chFinished chan bool) {
 
 		switch {
 		case tt == html.ErrorToken:
-			// End of the document, we're done
+			// End of the document
 			return
 		case tt == html.StartTagToken:
 			t := z.Token()
@@ -94,17 +91,14 @@ func crawl(url string, ch chan string, chFinished chan bool) {
 			if t.Data == "a" {
 				ok, href := getHref(t)
 				if ok {
-					ch <- fmt.Sprintf("Link   : %s", href)
+					ch <- fmt.Sprintf("Link:    %s", href)
 				}
 			}
 		case tt == html.TextToken:
 			t := z.Token()
-			// if strings.Contains(t.Data, "\n") {
-			// 	continue
-			// }
 
 			if foundTitle {
-				ch <- fmt.Sprintf("Title  : %s", t.Data)
+				ch <- fmt.Sprintf("Title:   %s", t.Data)
 			}
 
 			if foundSummary {
@@ -114,8 +108,23 @@ func crawl(url string, ch chan string, chFinished chan bool) {
 	}
 }
 
+type episode struct {
+	title, summary, link string
+}
+
+func newEpisode(title, summary, link string) episode {
+	return episode{
+		title:   title,
+		summary: summary,
+		link:    link,
+	}
+}
+
+func (e episode) String() string {
+	return fmt.Sprintf("Title: %s | Summary: %s | Link: %s", e.title, e.summary, e.link)
+}
+
 func main() {
-	foundUrls := []string{}
 	seedUrls := []string{"https://www.channel4.com/programmes/location-location-location/episode-guide/"}
 
 	// Channels
@@ -128,21 +137,36 @@ func main() {
 	}
 
 	// Subscribe to both channels
+	var episodes []episode
+	var title, summary, link string
 	for c := 0; c < len(seedUrls); {
 		select {
-		case url := <-chUrls:
-			foundUrls = append(foundUrls, url)
+		case v := <-chUrls:
+			if strings.Contains(v, "Title:") {
+				if title != "" {
+					episodes = append(episodes, newEpisode(title, summary, link))
+				}
+				title = strings.Replace(v, "Title:   ", "", 1)
+			} else if strings.Contains(v, "Summary:") {
+				if summary != "" {
+					episodes = append(episodes, newEpisode(title, summary, link))
+				}
+				summary = strings.Replace(v, "Summary: ", "", 1)
+			} else if strings.Contains(v, "Link:") {
+				if link != "" {
+					episodes = append(episodes, newEpisode(title, summary, link))
+				}
+				link = strings.Replace(v, "Link:    ", "", 1)
+			}
 		case <-chFinished:
 			c++
 		}
 	}
 
-	// We're done! Print the results...
+	fmt.Println("\nFound", len(episodes), "episodes:")
 
-	fmt.Println("\nFound", len(foundUrls), "unique urls:\n")
-
-	for _, url := range foundUrls {
-		fmt.Println(" - " + url)
+	for _, e := range episodes {
+		fmt.Println(e)
 	}
 
 	close(chUrls)
