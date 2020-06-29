@@ -1,0 +1,13 @@
+name: Lint everything
+# This workflow is triggered on pushes to the repository.
+on: [push]
+
+jobs:
+    build:
+        # Job name is Lint
+        name: Lint
+        # This job runs on Linux
+        runs-on: ubuntu-latest
+        steps:
+            - name: Super-Linter
+              uses: github/super-linter@v2.0.0
